@@ -84,19 +84,20 @@ git clone https://github.com/home-assistant/home-assistant-notebooks.git
    ```
 
    For MariaDB, MySQL, or PostgreSQL, pass the same kind of database URL as the `db_url` of your recorder instead.
-3. Run the cells one at a time, from the top: select the first code cell, and press <kbd>Shift</kbd> + <kbd>Enter</kbd> to run it and move to the next one.
+3. Run the cells from the top: select the first code cell, and press <kbd>Shift</kbd> + <kbd>Enter</kbd> to run it and move to the next one.
 
-The cells that work read your sensor data into a table. On a big database this takes a while. A cell that is still running shows `[*]` next to it. When it is done, the asterisk changes into a number.
+The notebook reads your sensor data into a table, and plots it. On a big database this takes a while. A cell that is still running shows `[*]` next to it. When it is done, the asterisk changes into a number.
 
-### What works, and what does not yet
+### Which databases work
 
-The notebook was written for an older version of the database schema, and only part of it works with the current one. A fix for all cells, on SQLite and on MariaDB or MySQL, is proposed in [home-assistant-notebooks#28](https://github.com/home-assistant/home-assistant-notebooks/pull/28). Until that is merged, this is what to expect:
+On SQLite, the default database, every cell of the notebook works with the current database schema. **Run** > **Run All Cells** runs them all in one go.
 
-- **SQLite** (the default database): the cells that connect to the database and the **View states** cells work. The **Popular entities** cell fails with `no such function: from_unixtime`, because that function only exists in MariaDB and MySQL. The cells that add features and times, and the seaborn plot, fail with a `KeyError`, because the `domain`, `last_changed`, and `device_class` columns no longer exist.
-- **MariaDB and MySQL**: the **View states** cells fail, because the query Data Detective uses for sensor data is written for SQLite.
-- **PostgreSQL**: none of the notebook is supported.
+The other databases are not fully covered yet:
 
-Because of this, run the cells one at a time. **Run** > **Run All Cells** stops at the first cell that fails. For something that works today, read the database with pandas yourself, as the next section shows.
+- **MariaDB and MySQL**: the **View states** cells use a query of Data Detective that is written for SQLite, so expect those to fail.
+- **PostgreSQL**: not supported. The notebook stops with an error in the cell that connects to the database.
+
+For those databases, read the database with pandas yourself, as the next section shows.
 
 ## Read the database with pandas
 
