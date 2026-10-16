@@ -2,6 +2,8 @@
 title: Explore your own data
 description: Set up JupyterLab, connect it to the database of your Home Assistant, and run your first report. About fifteen minutes.
 order: 2
+source: https://github.com/home-assistant/home-assistant-notebooks/blob/master/GETTING_STARTED.ipynb
+lastVerified: 2026-10-16
 ---
 
 Home Assistant records everything that happens in your home in a database: every state change, every event, and statistics over time. That data is yours, and you can learn a lot from it. When does the heating run? Which lights are on the longest? How does your energy use change with the seasons?
@@ -37,7 +39,9 @@ pip install jupyterlab HASS-data-detective seaborn
 jupyter lab
 ```
 
-JupyterLab opens in your browser. Data Detective reads the database, and seaborn draws the plots in the notebooks.
+JupyterLab opens in your browser. Data Detective reads the database, and seaborn draws plots.
+
+HASS Data Detective 3.3 and later require a Python version below 3.13. On Python 3.13 or newer, pip installs version 3.2 instead. That is the version this guide was tested with.
 
 You need access to the database. With the default SQLite database, copy `home-assistant_v2.db` from your configuration folder to your computer. Make the copy while Home Assistant is stopped, or from a backup, so you do not get a half-written file.
 
@@ -82,12 +86,48 @@ git clone https://github.com/home-assistant/home-assistant-notebooks.git
    For MariaDB, MySQL, or PostgreSQL, pass the same kind of database URL as the `db_url` of your recorder instead.
 3. Run the cells one at a time, from the top: select the first code cell, and press <kbd>Shift</kbd> + <kbd>Enter</kbd> to run it and move to the next one.
 
-Not every cell works on every database, which is why you run them one at a time. **Run** > **Run All Cells** stops at the first cell that fails.
+The cells that work read your sensor data into a table. On a big database this takes a while. A cell that is still running shows `[*]` next to it. When it is done, the asterisk changes into a number.
 
-- The **Popular entities** cell uses `from_unixtime()`, a MariaDB and MySQL function. On the default SQLite database, it fails with `no such function: from_unixtime`. Skip it and the table after it, and continue at **View states**.
-- **View states** and the plots after it use a query of Data Detective that is written for SQLite. With MariaDB, MySQL, or PostgreSQL, those cells fail instead.
+### What works, and what does not yet
 
-The cells that work read your data and show what it looks like: your sensor data in a table, and plotted over time. On a big database this takes a while. A cell that is still running shows `[*]` next to it. When it is done, the asterisk changes into a number.
+The notebook was written for an older version of the database schema, and only part of it works with the current one. A fix for all cells, on SQLite and on MariaDB or MySQL, is proposed in [home-assistant-notebooks#28](https://github.com/home-assistant/home-assistant-notebooks/pull/28). Until that is merged, this is what to expect:
+
+- **SQLite** (the default database): the cells that connect to the database and the **View states** cells work. The **Popular entities** cell fails with `no such function: from_unixtime`, because that function only exists in MariaDB and MySQL. The cells that add features and times, and the seaborn plot, fail with a `KeyError`, because the `domain`, `last_changed`, and `device_class` columns no longer exist.
+- **MariaDB and MySQL**: the **View states** cells fail, because the query Data Detective uses for sensor data is written for SQLite.
+- **PostgreSQL**: none of the notebook is supported.
+
+Because of this, run the cells one at a time. **Run** > **Run All Cells** stops at the first cell that fails. For something that works today, read the database with pandas yourself, as the next section shows.
+
+## Read the database with pandas
+
+You do not need Data Detective to get your data into a table. [pandas](https://pandas.pydata.org/) and SQLAlchemy, which the `pip install` above already brought in, read the database directly. Paste this into a new cell of a notebook, next to your copy of `home-assistant_v2.db`:
+
+```python
+import pandas as pd
+import sqlalchemy
+
+engine = sqlalchemy.create_engine("sqlite:///home-assistant_v2.db")
+
+query = sqlalchemy.text("""
+    SELECT states_meta.entity_id, states.state, states.last_updated_ts
+    FROM states
+    JOIN states_meta ON states.metadata_id = states_meta.metadata_id
+    WHERE states_meta.entity_id LIKE 'sensor.%'
+""")
+
+df = pd.read_sql(query, engine)
+df["last_updated"] = pd.to_datetime(
+    df["last_updated_ts"], unit="s", utc=True
+)
+df["state"] = pd.to_numeric(df["state"], errors="coerce")
+df = df.dropna(subset=["state"])
+
+print(df.groupby("entity_id")["state"].describe())
+```
+
+This reads the states of all your sensors, turns the timestamps into dates, keeps only the numeric states, and prints the count, average, minimum, and maximum for each sensor. From here, `df` is a regular pandas table you can filter, group, and plot.
+
+This example was tested on SQLite only. The query itself is plain SQL, so it is a good start for MariaDB, MySQL, or PostgreSQL too: change the database URL, and check the results.
 
 ## Make it your own
 
